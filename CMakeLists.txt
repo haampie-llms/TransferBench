@@ -204,6 +204,15 @@ option(ENABLE_AMD_SMI              "Enable AMD-SMI pod membership queries"      
 option(ENABLE_POD_COMM             "Enable pod communication"                     OFF)
 option(BUILD_RELOCATABLE_PACKAGE   "Build with RVS-style relocatable RPATH and amdrocm<MAJOR>-transferbench package naming" OFF)
 
+include(CheckLanguage)
+include(CMakeDependentOption)
+check_language(HIP)
+cmake_dependent_option(USE_HIPCXX "Use CMake HIP language support" OFF CMAKE_HIP_COMPILER OFF)
+if(USE_HIPCXX)
+  enable_language(HIP)
+  include(CheckCompilerFlag)
+endif()
+
 include(cmake/Dependencies.cmake) # rocm-cmake, rocm_local_targets, rocm_check_target_ids
 
 set(DEFAULT_GPUS
@@ -255,7 +264,18 @@ else()
 endif()
 
 # Check if clang can offload to each GPU_TARGETS entry.
-if(COMMAND rocm_check_target_ids)
+if(USE_HIPCXX)
+  message(STATUS "Checking for ROCm support for GPU targets: ${GPU_TARGETS}")
+  foreach(_target_id ${GPU_TARGETS})
+    string(REPLACE "+" "_on" _result_var "${_target_id}")
+    string(REPLACE "-" "_off" _result_var "${_result_var}")
+    string(MAKE_C_IDENTIFIER "HIP_COMPILER_HAS_TARGET_ID_${_result_var}" _result_var)
+    check_compiler_flag(HIP "--offload-arch=${_target_id}" ${_result_var})
+    if(${_result_var})
+      list(APPEND SUPPORTED_GPUS "${_target_id}")
+    endif()
+  endforeach()
+elseif(COMMAND rocm_check_target_ids)
   message(STATUS "Checking for ROCm support for GPU targets: ${GPU_TARGETS}")
   rocm_check_target_ids(SUPPORTED_GPUS TARGETS ${GPU_TARGETS})
 else()
@@ -276,6 +296,14 @@ endif()
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
+if(USE_HIPCXX)
+  # The HIP language takes the GPU targets from CMAKE_HIP_ARCHITECTURES
+  set(CMAKE_HIP_ARCHITECTURES "${GPU_TARGETS}")
+  set(CMAKE_HIP_STANDARD ${CMAKE_CXX_STANDARD})
+  set(CMAKE_HIP_STANDARD_REQUIRED ON)
+  set(CMAKE_HIP_EXTENSIONS OFF)
+endif()
+
 # Search only the active ROCm installation. ROCM_PATH is already resolved by the
 # pre-project() block, so this is always the right install.
 list(APPEND CMAKE_PREFIX_PATH
@@ -286,7 +314,7 @@ list(APPEND CMAKE_PREFIX_PATH
 find_package(hip REQUIRED CONFIG)
 message(STATUS "HIP compiler: ${HIP_COMPILER}")
 
-if(NOT (("${CMAKE_CXX_COMPILER}" MATCHES ".*hipcc") OR ("${CMAKE_CXX_COMPILER}" MATCHES ".*clang\\+\\+")))
+if(NOT USE_HIPCXX AND NOT (("${CMAKE_CXX_COMPILER}" MATCHES ".*hipcc") OR ("${CMAKE_CXX_COMPILER}" MATCHES ".*clang\\+\\+")))
   message(FATAL_ERROR "On ROCm platform 'hipcc' or HIP-aware Clang must be used as C++ compiler.")
 endif()
 
@@ -446,6 +474,9 @@ set(LIBRARY_NAME TransferBench)
 
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}")
 
+if(USE_HIPCXX)
+  set_source_files_properties(src/client/Client.cpp PROPERTIES LANGUAGE HIP)
+endif()
 add_executable(TransferBench src/client/Client.cpp)
 
 target_include_directories(TransferBench PRIVATE
@@ -479,7 +510,11 @@ target_compile_definitions(TransferBench PRIVATE
   TB_GIT_COMMIT="${TB_GIT_COMMIT}"
 )
 
-check_cxx_compiler_flag(-parallel-jobs=12 HAVE_PARALLEL_JOBS)
+if(USE_HIPCXX)
+  check_compiler_flag(HIP -parallel-jobs=12 HAVE_PARALLEL_JOBS)
+else()
+  check_cxx_compiler_flag(-parallel-jobs=12 HAVE_PARALLEL_JOBS)
+endif()
 if(HAVE_PARALLEL_JOBS)
   message(STATUS "Enabling parallel compile jobs: -parallel-jobs=12")
   target_compile_options(TransferBench PRIVATE -parallel-jobs=12)
