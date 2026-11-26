@@ -271,7 +271,7 @@ To modify the CMake behavior, use the following environment variables:
               <td> </td>
             </tr>
             <tr>
-              <td rowspan="5"><b>Build options (ON/OFF)</b> - Pass -DVAR=value to set</td>
+              <td rowspan="6"><b>Build options (ON/OFF)</b> - Pass -DVAR=value to set</td>
               <td><code>BUILD_LOCAL_GPU_TARGET_ONLY</code></td>
               <td>Builds only for the GPUs detected on the given machine using <code>rocm_agent_enumerator</code>.</td>
               <td><code>OFF</code></td>
@@ -294,6 +294,11 @@ To modify the CMake behavior, use the following environment variables:
             <tr>
               <td><code>ENABLE_POD_COMM</code></td>
               <td>Enables pod communication (HIP >= 8.0.0).</td>
+              <td><code>OFF</code></td>
+            </tr>
+            <tr>
+              <td><code>USE_HIPCXX</code></td>
+              <td>Compiles the HIP sources with CMake's HIP language support (<code>CMAKE_HIP_COMPILER</code>), so <code>CXX</code> can be any C++ compiler.</td>
               <td><code>OFF</code></td>
             </tr>
             <tr>
